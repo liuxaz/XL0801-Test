@@ -138,8 +138,16 @@ class MainActivity : AppCompatActivity() {
         val payload = record.getManufacturerSpecificData(MANUFACTURER_ID) ?: return
         if (payload.size < 3) return
 
-        val rawTemp = ((payload[0].toInt() and 0xFF) shl 8) or (payload[1].toInt() and 0xFF)
-        val temperature = rawTemp / 10.0
+        val rawTempUnsigned =
+            ((payload[0].toInt() and 0xFF) shl 8) or (payload[1].toInt() and 0xFF)
+
+        // XL0801 temperature uses signed 16-bit big-endian, unit = 0.1 °C.
+        // Example: FF 9C = -100 -> -10.0 °C
+        val rawTempSigned =
+            if (rawTempUnsigned and 0x8000 != 0) rawTempUnsigned - 0x10000
+            else rawTempUnsigned
+
+        val temperature = rawTempSigned / 10.0
         val humidity = payload[2].toInt() and 0xFF
 
         val embeddedMac = if (payload.size >= 9) {
