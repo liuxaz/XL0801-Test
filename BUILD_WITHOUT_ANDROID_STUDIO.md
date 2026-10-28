@@ -29,3 +29,6 @@ gradle assembleDebug
 
 APK 输出：
 `app/build/outputs/apk/debug/app-debug.apk`
+
+
+Temperature parsing fix: first 2 bytes are signed 16-bit big-endian (two's complement), divided by 10.

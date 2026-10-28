@@ -1,0 +1,1 @@
+App icon merged into project using generated logo. AndroidManifest.xml now references @mipmap/ic_launcher and @mipmap/ic_launcher_round.
