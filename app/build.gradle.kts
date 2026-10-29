@@ -9,8 +9,8 @@ android {
         applicationId = "com.example.xl0801monitor"
         minSdk = 23
         targetSdk = 33
-        versionCode = 1
-        versionName = "1.0"
+        versionCode = 2
+        versionName = "1.1"
     }
     buildTypes {
         release {

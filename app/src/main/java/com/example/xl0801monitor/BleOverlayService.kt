@@ -13,6 +13,7 @@ import android.view.*
 import android.widget.TextView
 import androidx.core.app.NotificationCompat
 import java.util.Locale
+import kotlin.math.abs
 
 class BleOverlayService : Service() {
     companion object {
@@ -26,6 +27,7 @@ class BleOverlayService : Service() {
     private var overlay: View? = null
     private var tempView: TextView? = null
     private var humView: TextView? = null
+    private var signalView: TextView? = null
     private val adapter by lazy {
         (getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager).adapter
     }
@@ -33,12 +35,23 @@ class BleOverlayService : Service() {
     override fun onCreate() {
         super.onCreate()
         createChannel()
+
+        val openIntent = Intent(this, MainActivity::class.java).apply {
+            putExtra(MainActivity.EXTRA_SHOW_DASHBOARD, true)
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
+        }
+        val pending = PendingIntent.getActivity(
+            this, 0, openIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+
         startForeground(
             NOTIFICATION_ID,
             NotificationCompat.Builder(this, CHANNEL_ID)
-                .setContentTitle("XL0801 温湿度")
+                .setContentTitle("蓝牙温湿度计")
                 .setContentText("正在监听 BLE 广播")
                 .setSmallIcon(android.R.drawable.stat_sys_data_bluetooth)
+                .setContentIntent(pending)
                 .setOngoing(true)
                 .build()
         )
@@ -53,6 +66,7 @@ class BleOverlayService : Service() {
         overlay = LayoutInflater.from(this).inflate(R.layout.overlay_temperature, null)
         tempView = overlay!!.findViewById(R.id.tvOverlayTemp)
         humView = overlay!!.findViewById(R.id.tvOverlayHumidity)
+        signalView = overlay!!.findViewById(R.id.tvOverlaySignal)
 
         val type = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O)
             WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
@@ -73,22 +87,36 @@ class BleOverlayService : Service() {
         var py = 0
         var tx = 0f
         var ty = 0f
+        var moved = false
 
         overlay!!.setOnTouchListener { _, e ->
             when (e.action) {
                 MotionEvent.ACTION_DOWN -> {
-                    px = p.x; py = p.y; tx = e.rawX; ty = e.rawY; true
+                    px = p.x; py = p.y; tx = e.rawX; ty = e.rawY; moved = false; true
                 }
                 MotionEvent.ACTION_MOVE -> {
+                    if (abs(e.rawX - tx) > 8 || abs(e.rawY - ty) > 8) moved = true
                     p.x = px + (e.rawX - tx).toInt()
                     p.y = py + (e.rawY - ty).toInt()
                     wm.updateViewLayout(overlay, p)
+                    true
+                }
+                MotionEvent.ACTION_UP -> {
+                    if (!moved) openDashboard()
                     true
                 }
                 else -> false
             }
         }
         wm.addView(overlay, p)
+    }
+
+    private fun openDashboard() {
+        val intent = Intent(this, MainActivity::class.java).apply {
+            putExtra(MainActivity.EXTRA_SHOW_DASHBOARD, true)
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
+        }
+        startActivity(intent)
     }
 
     @SuppressLint("MissingPermission")
@@ -112,9 +140,20 @@ class BleOverlayService : Service() {
         val rawSigned = if (rawUnsigned and 0x8000 != 0) rawUnsigned - 0x10000 else rawUnsigned
         val temperature = rawSigned / 10.0
         val humidity = payload[2].toInt() and 0xFF
+        val rssi = result.rssi
 
         tempView?.text = String.format(Locale.getDefault(), "%.1f°C", temperature)
         humView?.text = "$humidity%"
+        signalView?.text = signalBars(rssi)
+
+        SensorHistory.add(SensorPoint(System.currentTimeMillis(), temperature, humidity, rssi))
+    }
+
+    private fun signalBars(rssi: Int): String = when {
+        rssi >= -55 -> "▂▄▆█"
+        rssi >= -65 -> "▂▄▆"
+        rssi >= -75 -> "▂▄"
+        else -> "▂"
     }
 
     @SuppressLint("MissingPermission")
@@ -127,7 +166,7 @@ class BleOverlayService : Service() {
     private fun createChannel() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             getSystemService(NotificationManager::class.java).createNotificationChannel(
-                NotificationChannel(CHANNEL_ID, "XL0801 Monitor", NotificationManager.IMPORTANCE_LOW)
+                NotificationChannel(CHANNEL_ID, "蓝牙温湿度计", NotificationManager.IMPORTANCE_LOW)
             )
         }
     }
