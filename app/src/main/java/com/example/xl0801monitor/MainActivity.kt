@@ -61,7 +61,6 @@ class MainActivity : AppCompatActivity() {
         }
 
         ContextCompat.startForegroundService(this, Intent(this, BleOverlayService::class.java))
-
         if (dashboardMode) showDashboard() else finish()
     }
 
@@ -75,7 +74,7 @@ class MainActivity : AppCompatActivity() {
     private fun refreshDashboard() {
         if (!dashboardMode) return
         val points = SensorHistory.snapshot()
-        val latest = points.lastOrNull()
+        val latest = SensorHistory.latest()
         val chart = findViewById<TrendChartView>(R.id.trendChart) ?: return
         chart.setData(points)
 
@@ -83,8 +82,9 @@ class MainActivity : AppCompatActivity() {
             findViewById<TextView>(R.id.tvTemperature).text = String.format(Locale.getDefault(), "%.1f°C", latest.temperature)
             findViewById<TextView>(R.id.tvHumidity).text = "${latest.humidity}%"
             findViewById<TextView>(R.id.tvRssi).text = "${latest.rssi} dBm"
+            findViewById<TextView>(R.id.tvMac).text = "MAC  ${latest.mac}"
             val time = SimpleDateFormat("HH:mm:ss", Locale.getDefault()).format(Date(latest.time))
-            findViewById<TextView>(R.id.tvLastUpdate).text = "最后更新：$time"
+            findViewById<TextView>(R.id.tvLastUpdate).text = "最后更新  $time"
         }
     }
 

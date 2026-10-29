@@ -7,6 +7,11 @@ import android.graphics.Paint
 import android.graphics.Path
 import android.util.AttributeSet
 import android.view.View
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
+import kotlin.math.ceil
+import kotlin.math.floor
 import kotlin.math.max
 import kotlin.math.min
 
@@ -16,18 +21,32 @@ class TrendChartView @JvmOverloads constructor(
 ) : View(context, attrs) {
 
     private var data: List<SensorPoint> = emptyList()
+    private val density = resources.displayMetrics.density
 
     private val gridPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = Color.argb(40, 120, 120, 120)
-        strokeWidth = 1f
+        color = Color.rgb(225, 228, 232)
+        strokeWidth = 1f * density
     }
-    private val textPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = Color.DKGRAY
-        textSize = 30f
+    private val axisPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = Color.rgb(115, 120, 128)
+        textSize = 11f * resources.displayMetrics.scaledDensity
     }
-    private val linePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+    private val tempPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = Color.rgb(231, 93, 76)
         style = Paint.Style.STROKE
-        strokeWidth = 4f
+        strokeWidth = 2.2f * density
+        strokeJoin = Paint.Join.ROUND
+        strokeCap = Paint.Cap.ROUND
+    }
+    private val humidPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = Color.rgb(48, 132, 221)
+        style = Paint.Style.STROKE
+        strokeWidth = 2.2f * density
+        strokeJoin = Paint.Join.ROUND
+        strokeCap = Paint.Cap.ROUND
+    }
+    private val legendPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        textSize = 12f * resources.displayMetrics.scaledDensity
     }
 
     fun setData(points: List<SensorPoint>) {
@@ -37,75 +56,109 @@ class TrendChartView @JvmOverloads constructor(
 
     override fun onDraw(canvas: Canvas) {
         super.onDraw(canvas)
-        val left = 82f
-        val right = width - 22f
-        if (right <= left) return
 
-        val sectionH = height / 3f
-        drawSection(canvas, 0f, sectionH, "温度 °C", data.map { it.temperature.toFloat() }, 0)
-        drawSection(canvas, sectionH, sectionH * 2f, "湿度 %", data.map { it.humidity.toFloat() }, 1)
-        drawSection(canvas, sectionH * 2f, height.toFloat(), "RSSI dBm", data.map { it.rssi.toFloat() }, 2)
-    }
+        val left = 50f * density
+        val right = width - 50f * density
+        val top = 42f * density
+        val bottom = height - 42f * density
+        if (right <= left || bottom <= top) return
 
-    private fun drawSection(
-        canvas: Canvas,
-        top: Float,
-        bottom: Float,
-        title: String,
-        values: List<Float>,
-        series: Int
-    ) {
-        val left = 82f
-        val right = width - 22f
-        val plotTop = top + 38f
-        val plotBottom = bottom - 28f
+        drawLegend(canvas, left, 21f * density)
 
-        textPaint.textSize = 28f
-        canvas.drawText(title, 8f, top + 30f, textPaint)
-
-        for (i in 0..3) {
-            val y = plotTop + (plotBottom - plotTop) * i / 3f
+        for (i in 0..4) {
+            val y = top + (bottom - top) * i / 4f
             canvas.drawLine(left, y, right, y, gridPaint)
         }
 
-        if (values.isEmpty()) {
-            textPaint.textSize = 24f
-            canvas.drawText("等待数据...", left + 12f, (plotTop + plotBottom) / 2f, textPaint)
+        if (data.isEmpty()) {
+            axisPaint.textAlign = Paint.Align.CENTER
+            canvas.drawText("等待 BLE 数据...", width / 2f, (top + bottom) / 2f, axisPaint)
             return
         }
 
-        var minV = values.minOrNull() ?: 0f
-        var maxV = values.maxOrNull() ?: 1f
-        if (series == 1) {
-            minV = max(0f, minV - 5f)
-            maxV = min(100f, maxV + 5f)
-        } else {
-            val pad = max(1f, (maxV - minV) * 0.15f)
-            minV -= pad
-            maxV += pad
-        }
-        if (maxV - minV < 0.01f) {
-            maxV += 1f
-            minV -= 1f
+        val temps = data.map { it.temperature.toFloat() }
+        val hums = data.map { it.humidity.toFloat() }
+
+        var tempMin = floor((temps.minOrNull() ?: 0f) - 1f)
+        var tempMax = ceil((temps.maxOrNull() ?: 1f) + 1f)
+        if (tempMax - tempMin < 4f) {
+            val mid = (tempMax + tempMin) / 2f
+            tempMin = floor(mid - 2f)
+            tempMax = ceil(mid + 2f)
         }
 
-        textPaint.textSize = 21f
-        canvas.drawText(String.format("%.1f", maxV), 8f, plotTop + 8f, textPaint)
-        canvas.drawText(String.format("%.1f", minV), 8f, plotBottom, textPaint)
-
-        linePaint.color = when (series) {
-            0 -> Color.rgb(230, 90, 70)
-            1 -> Color.rgb(50, 130, 220)
-            else -> Color.rgb(70, 150, 90)
+        var humMin = max(0f, floor((hums.minOrNull() ?: 0f) - 5f))
+        var humMax = min(100f, ceil((hums.maxOrNull() ?: 100f) + 5f))
+        if (humMax - humMin < 10f) {
+            val mid = (humMax + humMin) / 2f
+            humMin = max(0f, floor(mid - 5f))
+            humMax = min(100f, ceil(mid + 5f))
         }
 
+        axisPaint.textAlign = Paint.Align.RIGHT
+        canvas.drawText(String.format(Locale.getDefault(), "%.0f°", tempMax), left - 7f * density, top + 4f * density, axisPaint)
+        canvas.drawText(String.format(Locale.getDefault(), "%.0f°", tempMin), left - 7f * density, bottom + 4f * density, axisPaint)
+
+        axisPaint.textAlign = Paint.Align.LEFT
+        canvas.drawText(String.format(Locale.getDefault(), "%.0f%%", humMax), right + 7f * density, top + 4f * density, axisPaint)
+        canvas.drawText(String.format(Locale.getDefault(), "%.0f%%", humMin), right + 7f * density, bottom + 4f * density, axisPaint)
+
+        drawSeries(canvas, data.map { it.temperature.toFloat() }, tempMin, tempMax, left, right, top, bottom, tempPaint)
+        drawSeries(canvas, data.map { it.humidity.toFloat() }, humMin, humMax, left, right, top, bottom, humidPaint)
+        drawTimeAxis(canvas, left, right, bottom)
+    }
+
+    private fun drawLegend(canvas: Canvas, x: Float, y: Float) {
+        val dot = 4f * density
+        tempPaint.style = Paint.Style.FILL
+        canvas.drawCircle(x, y, dot, tempPaint)
+        tempPaint.style = Paint.Style.STROKE
+        legendPaint.color = Color.rgb(70, 72, 76)
+        canvas.drawText("温度", x + 9f * density, y + 4f * density, legendPaint)
+
+        val x2 = x + 68f * density
+        humidPaint.style = Paint.Style.FILL
+        canvas.drawCircle(x2, y, dot, humidPaint)
+        humidPaint.style = Paint.Style.STROKE
+        canvas.drawText("湿度", x2 + 9f * density, y + 4f * density, legendPaint)
+    }
+
+    private fun drawSeries(
+        canvas: Canvas,
+        values: List<Float>,
+        minV: Float,
+        maxV: Float,
+        left: Float,
+        right: Float,
+        top: Float,
+        bottom: Float,
+        paint: Paint
+    ) {
+        if (values.isEmpty()) return
         val path = Path()
         values.forEachIndexed { index, value ->
-            val x = if (values.size == 1) left else left + (right - left) * index / (values.size - 1).toFloat()
-            val ratio = (value - minV) / (maxV - minV)
-            val y = plotBottom - ratio * (plotBottom - plotTop)
+            val x = if (values.size == 1) (left + right) / 2f else left + (right - left) * index / (values.size - 1f)
+            val ratio = ((value - minV) / (maxV - minV)).coerceIn(0f, 1f)
+            val y = bottom - ratio * (bottom - top)
             if (index == 0) path.moveTo(x, y) else path.lineTo(x, y)
         }
-        canvas.drawPath(path, linePaint)
+        canvas.drawPath(path, paint)
+    }
+
+    private fun drawTimeAxis(canvas: Canvas, left: Float, right: Float, bottom: Float) {
+        if (data.isEmpty()) return
+        val formatter = SimpleDateFormat("HH:mm", Locale.getDefault())
+        val indices = if (data.size < 3) {
+            data.indices.toList()
+        } else {
+            listOf(0, data.size / 2, data.size - 1).distinct()
+        }
+
+        axisPaint.textAlign = Paint.Align.CENTER
+        indices.forEach { idx ->
+            val x = if (data.size == 1) (left + right) / 2f else left + (right - left) * idx / (data.size - 1f)
+            val label = formatter.format(Date(data[idx].time))
+            canvas.drawText(label, x, bottom + 24f * density, axisPaint)
+        }
     }
 }

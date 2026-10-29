@@ -27,7 +27,8 @@ class BleOverlayService : Service() {
     private var overlay: View? = null
     private var tempView: TextView? = null
     private var humView: TextView? = null
-    private var signalView: TextView? = null
+    private var signalView: SignalStrengthView? = null
+
     private val adapter by lazy {
         (getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager).adapter
     }
@@ -66,7 +67,7 @@ class BleOverlayService : Service() {
         overlay = LayoutInflater.from(this).inflate(R.layout.overlay_temperature, null)
         tempView = overlay!!.findViewById(R.id.tvOverlayTemp)
         humView = overlay!!.findViewById(R.id.tvOverlayHumidity)
-        signalView = overlay!!.findViewById(R.id.tvOverlaySignal)
+        signalView = overlay!!.findViewById(R.id.signalView)
 
         val type = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O)
             WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
@@ -141,19 +142,26 @@ class BleOverlayService : Service() {
         val temperature = rawSigned / 10.0
         val humidity = payload[2].toInt() and 0xFF
         val rssi = result.rssi
+        val mac = embeddedMac(payload)
 
         tempView?.text = String.format(Locale.getDefault(), "%.1f°C", temperature)
         humView?.text = "$humidity%"
-        signalView?.text = signalBars(rssi)
+        signalView?.setRssi(rssi)
 
-        SensorHistory.add(SensorPoint(System.currentTimeMillis(), temperature, humidity, rssi))
+        SensorHistory.update(
+            SensorLatest(
+                System.currentTimeMillis(),
+                temperature,
+                humidity,
+                rssi,
+                mac
+            )
+        )
     }
 
-    private fun signalBars(rssi: Int): String = when {
-        rssi >= -55 -> "▂▄▆█"
-        rssi >= -65 -> "▂▄▆"
-        rssi >= -75 -> "▂▄"
-        else -> "▂"
+    private fun embeddedMac(payload: ByteArray): String {
+        if (payload.size < 9) return "--:--:--:--:--:--"
+        return payload.copyOfRange(3, 9).joinToString(":") { "%02X".format(it.toInt() and 0xFF) }
     }
 
     @SuppressLint("MissingPermission")

@@ -29,12 +29,9 @@
         android:textStyle="bold"
         android:textSize="17sp" />
 
-    <TextView
-        android:id="@+id/tvOverlaySignal"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_marginLeft="10dp"
-        android:text="▂"
-        android:textColor="#DFFFFFFF"
-        android:textSize="14sp" />
+    <com.example.xl0801monitor.SignalStrengthView
+        android:id="@+id/signalView"
+        android:layout_width="22dp"
+        android:layout_height="18dp"
+        android:layout_marginLeft="10dp" />
 </LinearLayout>
